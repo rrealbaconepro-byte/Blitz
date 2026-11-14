@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101114">
+  <title>Talk to AI</title>
+  <style>
+    :root { color-scheme: dark; --bg:#101114; --panel:#181a20; --line:#292c35; --muted:#9a9eaa; --text:#f4f5f7; --accent:#8b7cff; }
+    * { box-sizing:border-box }
+    body { margin:0; min-height:100vh; background:radial-gradient(ellipse at 50% -15%,#292448 0,transparent 48%),var(--bg); color:var(--text); font:15px/1.5 Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    .app { min-height:100vh; display:flex; flex-direction:column; max-width:1000px; margin:auto; padding:22px 22px 18px; }
+    header { display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--line); padding:4px 0 18px; }
+    .brand { display:flex; align-items:center; gap:11px; font-weight:700; letter-spacing:.2px; }
+    .logo { width:34px;height:34px;border-radius:12px;display:grid;place-items:center;background:linear-gradient(135deg,#a99dff,#6352d9);color:white;font-size:18px;box-shadow:0 5px 24px #7766ff44; }
+    .status { color:#a9e5bd;font-size:12px;display:flex;align-items:center;gap:7px; }
+    .dot { width:7px;height:7px;border-radius:50%;background:#6bd68f; }
+    main { flex:1; display:flex; flex-direction:column; width:100%; max-width:780px; margin:0 auto; }
+    .welcome { text-align:center; margin:auto 0 26px; padding-top:54px; }
+    .welcome .spark { font-size:30px; }
+    h1 { font-size:clamp(28px,5vw,42px); letter-spacing:-1.5px; margin:12px 0 8px; }
+    .sub { color:var(--muted); margin:0; }
+    .suggestions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin:25px auto 0; max-width:590px; width:100%; }
+    .suggestion { background:#191b22;border:1px solid var(--line);color:#d8d9e1;border-radius:14px;padding:13px 15px;text-align:left;cursor:pointer;transition:.18s; }
+    .suggestion:hover { border-color:#7668db; transform:translateY(-1px); }
+    #chat { display:flex;flex-direction:column;gap:20px;padding:28px 0 20px; }
+    .message { display:flex;gap:12px;align-items:flex-start; }
+    .avatar { flex:0 0 30px;height:30px;border-radius:10px;display:grid;place-items:center;background:#29233f;color:#c8c0ff;font-size:14px;font-weight:700; }
+    .message.user .avatar { background:#29313a;color:#d7e8ff; }
+    .bubble { max-width:calc(100% - 42px); white-space:pre-wrap; overflow-wrap:anywhere; padding:3px 0; }
+    .message.user .bubble { background:#20232c;border:1px solid #303440;padding:11px 14px;border-radius:14px; }
+    .message.assistant .bubble { padding-top:4px; }
+    .composer-wrap { position:sticky;bottom:0;padding:14px 0 5px;background:linear-gradient(transparent,var(--bg) 20%); }
+    .composer { display:flex;align-items:flex-end;gap:10px;padding:10px 11px 10px 17px;background:#1b1d24;border:1px solid #363945;border-radius:19px;box-shadow:0 12px 40px #0005; }
+    textarea { flex:1;resize:none;max-height:160px;min-height:27px;border:0;outline:0;background:transparent;color:var(--text);font:inherit;line-height:1.5;padding:3px 0; }
+    textarea::placeholder { color:#858996; }
+    #send { border:0;border-radius:12px;width:38px;height:38px;background:var(--accent);color:white;cursor:pointer;font-size:18px;display:grid;place-items:center; }
+    #send:disabled { opacity:.45;cursor:not-allowed; }
+    .hint { text-align:center;color:#747987;font-size:11px;margin:9px 0 0; }
+    .error { color:#ff9e9e; }
+    .typing { color:var(--muted);font-size:13px; }
+    @media(max-width:560px){.app{padding:16px 14px}.suggestions{grid-template-columns:1fr}.welcome{padding-top:32px}.status{font-size:0}.status .dot{width:8px;height:8px}}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div class="brand"><div class="logo">✦</div><span>Talk to AI</span></div>
+      <div class="status"><span class="dot"></span> AI assistant</div>
+    </header>
+    <main>
+      <section class="welcome" id="welcome">
+        <div class="spark">✦</div>
+        <h1>What can I help with?</h1>
+        <p class="sub">Ask anything. Start a conversation below.</p>
+        <div class="suggestions">
+          <button class="suggestion">Explain something in simple words</button>
+          <button class="suggestion">Help me build a website</button>
+          <button class="suggestion">Give me a creative idea</button>
+          <button class="suggestion">Help me solve a problem</button>
+        </div>
+      </section>
+      <section id="chat" aria-live="polite"></section>
+      <div class="composer-wrap">
+        <form class="composer" id="form">
+          <textarea id="prompt" rows="1" placeholder="Message the AI..." aria-label="Message the AI"></textarea>
+          <button id="send" type="submit" aria-label="Send message">↑</button>
+        </form>
+        <p class="hint">AI can make mistakes. Check important information.</p>
+      </div>
+    </main>
+  </div>
+<script>
+  const form = document.getElementById("form");
+  const promptBox = document.getElementById("prompt");
+  const sendButton = document.getElementById("send");
+  const chat = document.getElementById("chat");
+  const welcome = document.getElementById("welcome");
+  const messages = [];
+
+  function addMessage(role, content, extraClass = "") {
+    const row = document.createElement("div");
+    row.className = `message ${role} ${extraClass}`;
+    const avatar = document.createElement("div");
+    avatar.className = "avatar";
+    avatar.textContent = role === "user" ? "You" : "✦";
+    const bubble = document.createElement("div");
+    bubble.className = "bubble";
+    bubble.textContent = content;
+    row.append(avatar, bubble);
+    chat.appendChild(row);
+    row.scrollIntoView({ behavior: "smooth", block: "end" });
+    return { row, bubble };
+  }
+
+  async function sendMessage(text) {
+    const content = text.trim();
+    if (!content || sendButton.disabled) return;
+    welcome.hidden = true;
+    promptBox.value = "";
+    promptBox.style.height = "auto";
+    messages.push({ role: "user", content });
+    addMessage("user", content);
+    sendButton.disabled = true;
+    const typing = addMessage("assistant", "Thinking…", "typing");
+
+    try {
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Request failed.");
+      typing.row.remove();
+      messages.push({ role: "assistant", content: data.reply });
+      addMessage("assistant", data.reply);
+    } catch (error) {
+      typing.bubble.textContent = error.message;
+      typing.bubble.classList.add("error");
+    } finally {
+      sendButton.disabled = false;
+      promptBox.focus();
+    }
+  }
+
+  form.addEventListener("submit", event => {
+    event.preventDefault();
+    sendMessage(promptBox.value);
+  });
+  promptBox.addEventListener("input", () => {
+    promptBox.style.height = "auto";
+    promptBox.style.height = Math.min(promptBox.scrollHeight, 160) + "px";
+  });
+  promptBox.addEventListener("keydown", event => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      form.requestSubmit();
+    }
+  });
+  document.querySelectorAll(".suggestion").forEach(button => {
+    button.addEventListener("click", () => sendMessage(button.textContent));
+  });
+</script>
+</body>
+</html>
